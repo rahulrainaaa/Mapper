@@ -50,6 +50,12 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import ibt.ortc.api.Ortc;
+import ibt.ortc.extensibility.OnConnected;
+import ibt.ortc.extensibility.OnMessage;
+import ibt.ortc.extensibility.OrtcClient;
+import ibt.ortc.extensibility.OrtcFactory;
+
 /**
  * @class MapsActivity
  * @desc Handles the Google Map Demo UI completely.
@@ -74,6 +80,11 @@ public class MapsActivity extends FragmentActivity implements
     //Boolean flags
     boolean firstSearch = true;
     boolean firstRefresh = true;
+
+    //RealTime Protocol objects
+    OrtcFactory factory;
+    OrtcClient client;
+
 
     /**
      * @desc FragmentActivity required methods override.
@@ -126,6 +137,75 @@ public class MapsActivity extends FragmentActivity implements
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, this);
         locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000, 0, this);
         Toast.makeText(getApplicationContext(), "Fetching Current Location", Toast.LENGTH_SHORT).show();
+
+        Ortc ortc = new Ortc();
+
+        try {
+            factory = ortc.loadOrtcFactory("IbtRealtimeSJ");
+            client = factory.createClient();
+            client.setClusterUrl("http://ortc-developers.realtime.co/server/2.1");
+            client.connect("jRCDxz", "3afxcv4ymzzsfmovdon22kmh");
+        } catch (Exception e) {
+            System.out.println(String.format("Realtime Error: %s", e.toString()));
+            Toast.makeText(this, "EXCEPTION:\nRealTime Errors.", Toast.LENGTH_SHORT).show();
+        }
+
+        client.onConnected = new OnConnected() {
+            @Override
+            public void run(final OrtcClient sender) {
+                // Messaging client connected
+                System.out.println("\n\n***************client connected******************\n\n");
+                // Now subscribe the channel
+                client.subscribe(Constants.USERNAME_FRIEND, true,
+                        new OnMessage() {
+                            // This function is the message handler
+                            // It will be invoked for each message received in my Channel
+                            public void run(OrtcClient sender, String channel, String message) {
+                                // Received a message
+                                System.out.println(message);
+                                final String msgg = "" + message;
+                                Handler handler = new Handler(MapsActivity.this.getMainLooper());
+                                handler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+
+                                        String[] tokens = msgg.split(",");
+                                        float lat = Float.valueOf(tokens[0].trim());
+                                        float lon = Float.valueOf(tokens[1].trim());
+                                        //Update the map locations.
+                                        MapsActivity.this.locEnd = new LatLng(lat, lon);
+
+                                        //If searched first time
+                                        if(MapsActivity.this.firstSearch)
+                                        {
+                                            MapsActivity.this.firstSearch = false;
+                                            LatLng latLng = new LatLng(lat, lon);
+                                            srchMarker = mMap.addMarker(new MarkerOptions().position(latLng).title("Friend").icon(BitmapDescriptorFactory.fromResource(R.drawable.bb)));
+                                            mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+                                        }
+                                        else
+                                        {
+                                            double latitude = lat;
+                                            double longitude = lon;
+                                            LatLng latLng = new LatLng(latitude, longitude);
+                                            srchMarker.setTitle("Friend");
+                                            srchMarker.setPosition(latLng);
+
+                                            mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+                                        }
+                                        mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
+                                        //If line not null then remove old polyline routing.
+                                        if(line != null)
+                                        {
+                                            line.remove();
+                                        }
+
+                                    }
+                                });
+                            }
+                        });
+            }
+        };
     }
 
     @Override
@@ -169,6 +249,9 @@ public class MapsActivity extends FragmentActivity implements
         //Get location and update map pin
         double latitude = location.getLatitude();
         double longitude = location.getLongitude();
+
+        //Send the notification to all registered.
+        client.send(Constants.USERNAME, "" + latitude + "," + longitude);
         LatLng latLng = new LatLng(latitude, longitude);
 
         //Check if refreshed first time.
@@ -204,7 +287,7 @@ public class MapsActivity extends FragmentActivity implements
     @Override
     public boolean onMarkerClick(Marker marker)
     {
-        if(marker.getTitle().contains("Destination"))
+        if(marker.getTitle().contains("Destination") || marker.getTitle().contains("Friend"))
         {
             //Do Routing
             Routing routing = new Routing.Builder()

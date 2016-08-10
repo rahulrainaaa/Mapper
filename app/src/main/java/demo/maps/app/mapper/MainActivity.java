@@ -27,8 +27,20 @@ public class MainActivity extends AppCompatActivity {
 
                 Constants.USERNAME = "" + me.getText();
                 Constants.USERNAME_FRIEND = "" + friend.getText();
+                if(Constants.USERNAME.trim().isEmpty())
+                {
+                    friend.setError(null);
+                    me.setError("Cannot be empty");
+                    return;
+                }
+                else if(Constants.USERNAME_FRIEND.trim().isEmpty())
+                {
+                    friend.setError("Cannot be empty");
+                    me.setError(null);
+                    return;
+                }
                 startActivity(new Intent(MainActivity.this, MapsActivity.class));
-                finish();
+                //finish();
 
             }
         });
